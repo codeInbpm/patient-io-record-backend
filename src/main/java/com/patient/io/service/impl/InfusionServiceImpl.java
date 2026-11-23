@@ -89,8 +89,15 @@ public class InfusionServiceImpl implements InfusionService {
         record.setPatientName(patient.getPatientName());
         record.setCapacity(dto.getCapacity());
         record.setUsageType(dto.getUsageType());
-        record.setStartTime(dto.getStartTime() != null ? dto.getStartTime() : LocalDateTime.now());
-        record.setEstimatedEndTime(dto.getEstimatedEndTime());
+        LocalDateTime start = dto.getStartTime() != null ? dto.getStartTime() : LocalDateTime.now();
+        LocalDateTime estEnd = dto.getEstimatedEndTime();
+        if (start != null && estEnd != null && estEnd.isBefore(start)) {
+            if (Duration.between(estEnd, start).toHours() < 24) {
+                estEnd = estEnd.plusDays(1);
+            }
+        }
+        record.setStartTime(start);
+        record.setEstimatedEndTime(estEnd);
         record.setStatus("INFUSING");
         record.setActualIntakeAmount(dto.getCapacity());
         record.setIsSyncedIntake(intakeRecordId != null ? 1 : 0);
@@ -282,6 +289,9 @@ public class InfusionServiceImpl implements InfusionService {
                 LocalDateTime estEnd = record.getEstimatedEndTime();
 
                 if (estEnd != null) {
+                    if (start != null && estEnd.isBefore(start) && Duration.between(estEnd, start).toHours() < 24) {
+                        estEnd = estEnd.plusDays(1);
+                    }
                     long remainingMin = Duration.between(now, estEnd).toMinutes();
                     vo.setRemainingMinutes(remainingMin);
                     vo.setIsTimeout(remainingMin < 0);

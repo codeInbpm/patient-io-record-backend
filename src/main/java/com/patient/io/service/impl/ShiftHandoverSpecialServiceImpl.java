@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -164,6 +165,10 @@ public class ShiftHandoverSpecialServiceImpl implements ShiftHandoverSpecialServ
             item.put("detail", inf.getUsageType() + " " + inf.getCapacity() + "ml");
 
             if ("维持液".equalsIgnoreCase(inf.getUsageType()) || "maint".equalsIgnoreCase(inf.getUsageType())) {
+                item.put("drug", StrUtil.isNotBlank(inf.getRemark()) ? inf.getRemark() : inf.getUsageType());
+                if (inf.getStartTime() != null) {
+                    item.put("time", inf.getStartTime().format(DateTimeFormatter.ofPattern("HH:mm")));
+                }
                 maintFluidList.add(item);
             } else {
                 ivgList.add(item);
