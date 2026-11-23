@@ -29,6 +29,14 @@ public class NurseController {
     }
 
     /**
+     * 查询当班在职护士选项列表（供交班选择接班护士使用，所有角色可查）
+     */
+    @GetMapping("/options")
+    public Result<List<NurseManageVO>> listNurseOptions(@RequestParam(value = "wardId", required = false) Long wardId) {
+        return Result.success(nurseService.listNurseOptions(wardId));
+    }
+
+    /**
      * 新增或编辑护士
      */
     @PostMapping

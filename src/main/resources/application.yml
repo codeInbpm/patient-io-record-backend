@@ -35,3 +35,10 @@ wechat:
 jwt:
   secret: patient-io-record-jwt-secret-key-2026-very-secure
   expiration: 604800 # 7天，单位秒
+
+# MinIO 对象存储服务配置 (专属Bucket: patient-io-record)
+minio:
+  endpoint: http://139.224.27.132:9000
+  accessKey: admin
+  secretKey: endless@028btc
+  bucketName: patient-io-record

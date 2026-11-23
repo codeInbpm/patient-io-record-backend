@@ -22,7 +22,8 @@ public class MybatisPlusConfig {
     private static final List<String> IGNORE_TABLES = Arrays.asList(
             "hospital",
             "sys_admin_user",
-            "sys_user"
+            "sys_user",
+            "infusion_image"
     );
 
     @Bean

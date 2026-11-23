@@ -16,6 +16,11 @@ public interface NurseService {
     List<NurseManageVO> listManageNurses();
 
     /**
+     * 查询在职护士选项列表（供交班选择接班人，所有角色可查）
+     */
+    List<NurseManageVO> listNurseOptions(Long wardId);
+
+    /**
      * 保存护士（新增或编辑）
      */
     NurseManageVO saveNurse(NurseSaveDTO dto);

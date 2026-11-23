@@ -47,6 +47,28 @@ public class NurseServiceImpl implements NurseService {
     @Autowired
     private DepartmentMapper departmentMapper;
 
+    @Override
+    public List<NurseManageVO> listNurseOptions(Long wardId) {
+        LambdaQueryWrapper<Nurse> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(Nurse::getStatus, 1);
+        if (wardId != null && wardId > 0) {
+            queryWrapper.eq(Nurse::getWardId, wardId);
+        }
+        queryWrapper.orderByAsc(Nurse::getId);
+        List<Nurse> nurses = nurseMapper.selectList(queryWrapper);
+        return nurses.stream().map(n -> {
+            NurseManageVO vo = new NurseManageVO();
+            vo.setId(n.getId());
+            vo.setRealName(n.getRealName());
+            vo.setJobNumber(n.getJobNumber());
+            vo.setRole(n.getRole());
+            vo.setWardId(n.getWardId());
+            vo.setWardName(n.getWardName());
+            vo.setStatus(n.getStatus());
+            return vo;
+        }).collect(Collectors.toList());
+    }
+
     private void checkHeadNursePermission() {
         String role = UserContext.getRole();
         if (!"HEAD_NURSE".equals(role) && !"SUPER_ADMIN".equals(role) && !"HOSPITAL_ADMIN".equals(role)) {

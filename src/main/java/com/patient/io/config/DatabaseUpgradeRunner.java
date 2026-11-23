@@ -158,6 +158,109 @@ public class DatabaseUpgradeRunner implements CommandLineRunner {
                 log.warn("补齐护士病区数据提示: {}", e.getMessage());
             }
 
+            // 9. 自动创建功能一：患者补液记录表 infusion_record
+            try {
+                jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS `infusion_record` (" +
+                        "`id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID'," +
+                        "`hospital_id` BIGINT NOT NULL DEFAULT 1 COMMENT '医院ID(租户隔离)'," +
+                        "`ward_id` BIGINT NOT NULL COMMENT '病区ID'," +
+                        "`bed_id` BIGINT NOT NULL COMMENT '床位ID'," +
+                        "`bed_no` VARCHAR(32) NOT NULL COMMENT '床号冗余'," +
+                        "`patient_id` BIGINT NOT NULL COMMENT '患者ID'," +
+                        "`patient_name` VARCHAR(64) NOT NULL COMMENT '患者姓名冗余'," +
+                        "`capacity` INT NOT NULL COMMENT '补液容量(ml)'," +
+                        "`usage_type` VARCHAR(64) NOT NULL COMMENT '给药用法(ivg/ibn/iv drip/自定义)'," +
+                        "`start_time` DATETIME NOT NULL COMMENT '开始补液时间'," +
+                        "`estimated_end_time` DATETIME NOT NULL COMMENT '预计拔针时间'," +
+                        "`actual_end_time` DATETIME DEFAULT NULL COMMENT '实际结束时间'," +
+                        "`status` VARCHAR(20) NOT NULL DEFAULT 'INFUSING' COMMENT '状态: INFUSING-正在补液, COMPLETED-正常结束, STOPPED-异常中断'," +
+                        "`actual_intake_amount` INT DEFAULT NULL COMMENT '实际滴入量(ml)'," +
+                        "`is_synced_intake` TINYINT(1) DEFAULT 1 COMMENT '是否已同步入量记录: 1-是, 0-否'," +
+                        "`intake_record_id` BIGINT DEFAULT NULL COMMENT '关联的入量记录ID'," +
+                        "`nurse_id` BIGINT NOT NULL COMMENT '经办护士ID'," +
+                        "`nurse_name` VARCHAR(64) NOT NULL COMMENT '经办护士姓名'," +
+                        "`end_nurse_id` BIGINT DEFAULT NULL COMMENT '拔针/结束护士ID'," +
+                        "`end_nurse_name` VARCHAR(64) DEFAULT NULL COMMENT '拔针/结束护士姓名'," +
+                        "`remark` VARCHAR(500) DEFAULT NULL COMMENT '补液备注'," +
+                        "`is_deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除: 0-正常, 1-删除'," +
+                        "`create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'," +
+                        "`update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'," +
+                        "PRIMARY KEY (`id`)," +
+                        "KEY `idx_ward_status` (`ward_id`, `status`)," +
+                        "KEY `idx_patient_time` (`patient_id`, `start_time`)," +
+                        "KEY `idx_estimated_end` (`status`, `estimated_end_time`)" +
+                        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='患者补液记录表'");
+                log.info("已检查并确保 infusion_record 补液记录表创建成功");
+            } catch (Exception e) {
+                log.warn("创建 infusion_record 表异常: {}", e.getMessage());
+            }
+
+            // 10. 自动创建补液图片凭据表 infusion_image
+            try {
+                jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS `infusion_image` (" +
+                        "`id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID'," +
+                        "`hospital_id` BIGINT NOT NULL DEFAULT 1 COMMENT '医院ID'," +
+                        "`infusion_id` BIGINT NOT NULL COMMENT '关联补液记录ID'," +
+                        "`file_name` VARCHAR(255) NOT NULL COMMENT '原始文件名'," +
+                        "`object_key` VARCHAR(512) NOT NULL COMMENT 'MinIO存储对象Key'," +
+                        "`file_url` VARCHAR(1024) NOT NULL COMMENT '图片访问全路径URL'," +
+                        "`file_size` BIGINT DEFAULT NULL COMMENT '文件大小(字节)'," +
+                        "`upload_user_id` BIGINT NOT NULL COMMENT '上传人ID'," +
+                        "`create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'," +
+                        "PRIMARY KEY (`id`)," +
+                        "KEY `idx_infusion_id` (`infusion_id`)" +
+                        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='补液凭据图片表'");
+                // 升级检查：检查是否存在 hospital_id 列
+                try {
+                    jdbcTemplate.execute("ALTER TABLE `infusion_image` ADD COLUMN `hospital_id` BIGINT NOT NULL DEFAULT 1 COMMENT '医院ID' AFTER `infusion_id`");
+                } catch (Exception ignored) {}
+                log.info("已检查并确保 infusion_image 补液图片表创建成功");
+            } catch (Exception e) {
+                log.warn("创建 infusion_image 表异常: {}", e.getMessage());
+            }
+
+            // 11. 自动创建功能二：每日交接班特殊记录表 shift_handover_special
+            try {
+                jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS `shift_handover_special` (" +
+                        "`id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID'," +
+                        "`hospital_id` BIGINT NOT NULL DEFAULT 1 COMMENT '医院ID'," +
+                        "`ward_id` BIGINT NOT NULL COMMENT '病区ID'," +
+                        "`handover_date` DATE NOT NULL COMMENT '交接日期'," +
+                        "`shift_type` VARCHAR(20) NOT NULL DEFAULT 'ALL_DAY' COMMENT '班次类型(ALL_DAY-全天/DAY-白班/NIGHT-夜班)'," +
+                        "`leave_hospital_json` MEDIUMTEXT DEFAULT NULL COMMENT '请假记录JSON'," +
+                        "`laxative_json` MEDIUMTEXT DEFAULT NULL COMMENT '泻药记录JSON'," +
+                        "`temperature_abnormal_json` MEDIUMTEXT DEFAULT NULL COMMENT '体温异常记录JSON'," +
+                        "`blood_sugar_json` MEDIUMTEXT DEFAULT NULL COMMENT '血糖记录JSON'," +
+                        "`blood_pressure_json` MEDIUMTEXT DEFAULT NULL COMMENT '血压记录JSON'," +
+                        "`urine_volume_json` MEDIUMTEXT DEFAULT NULL COMMENT '尿量记录JSON'," +
+                        "`special_cases` MEDIUMTEXT DEFAULT NULL COMMENT '特殊情况文字自由记录'," +
+                        "`pipe_level1_json` MEDIUMTEXT DEFAULT NULL COMMENT 'I级护理床位清单JSON'," +
+                        "`pipe_monitor_json` MEDIUMTEXT DEFAULT NULL COMMENT '监护床位清单JSON'," +
+                        "`pipe_maint_fluid_json` MEDIUMTEXT DEFAULT NULL COMMENT '维持液床位清单JSON'," +
+                        "`pipe_ivg_json` MEDIUMTEXT DEFAULT NULL COMMENT 'IVG床位清单JSON'," +
+                        "`pipe_picc_json` MEDIUMTEXT DEFAULT NULL COMMENT 'PICC床位清单JSON'," +
+                        "`pipe_cvc_json` MEDIUMTEXT DEFAULT NULL COMMENT 'CVC床位清单JSON'," +
+                        "`pipe_port_json` MEDIUMTEXT DEFAULT NULL COMMENT 'PORT输液港床位清单JSON'," +
+                        "`pipe_nasobiliary_json` MEDIUMTEXT DEFAULT NULL COMMENT '鼻胆管床位清单JSON'," +
+                        "`pipe_gastro_decomp_json` MEDIUMTEXT DEFAULT NULL COMMENT '胃肠减压管床位清单JSON'," +
+                        "`pipe_catheter_json` MEDIUMTEXT DEFAULT NULL COMMENT '导尿管床位清单JSON'," +
+                        "`pipe_abdom_drain_json` MEDIUMTEXT DEFAULT NULL COMMENT '腹腔引流管床位清单JSON'," +
+                        "`pipe_other_json` MEDIUMTEXT DEFAULT NULL COMMENT '其他导管床位清单JSON'," +
+                        "`status` VARCHAR(20) NOT NULL DEFAULT 'DRAFT' COMMENT '状态: DRAFT-草稿编辑中, SUBMITTED-已交班提交, LOCKED-护士长已归档锁定'," +
+                        "`last_editor_id` BIGINT DEFAULT NULL COMMENT '最后更新人护士ID'," +
+                        "`last_editor_name` VARCHAR(64) DEFAULT NULL COMMENT '最后更新人姓名'," +
+                        "`head_nurse_signed` TINYINT(1) DEFAULT 0 COMMENT '护士长是否核签: 0-未签, 1-已签'," +
+                        "`head_nurse_signed_time` DATETIME DEFAULT NULL COMMENT '护士长核签时间'," +
+                        "`create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'," +
+                        "`update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'," +
+                        "PRIMARY KEY (`id`)," +
+                        "UNIQUE KEY `uk_ward_date_shift` (`ward_id`, `handover_date`, `shift_type`)" +
+                        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='每日交接班特殊记录表'");
+                log.info("已检查并确保 shift_handover_special 特殊交接班表创建成功");
+            } catch (Exception e) {
+                log.warn("创建 shift_handover_special 表异常: {}", e.getMessage());
+            }
+
             log.info(">>> 数据库表结构与索引升级检查完成！");
         } catch (Exception e) {
             log.error("数据库升级 runner 执行失败", e);
