@@ -37,6 +37,7 @@ public class InfusionRecord implements Serializable {
     private Long endNurseId;
     private String endNurseName;
     private String remark;
+    private Integer remindStatus; // 提醒状态: 0-未提醒, 1-即将结束已提醒, 2-超时已提醒
 
     @TableLogic
     private Integer isDeleted;

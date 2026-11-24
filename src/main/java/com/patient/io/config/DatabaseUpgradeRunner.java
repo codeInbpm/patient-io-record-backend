@@ -261,6 +261,22 @@ public class DatabaseUpgradeRunner implements CommandLineRunner {
                 log.warn("创建 shift_handover_special 表异常: {}", e.getMessage());
             }
 
+            // 11. 检查并为 infusion_record 表添加 remind_status 字段
+            try {
+                jdbcTemplate.execute("ALTER TABLE `infusion_record` ADD COLUMN `remind_status` INT NOT NULL DEFAULT 0 COMMENT '提醒状态: 0-未提醒, 1-即将结束已提醒, 2-超时已提醒' AFTER `remark`");
+                log.info("已成功为 infusion_record 表添加 remind_status 字段");
+            } catch (Exception e) {
+                // 已存在忽略
+            }
+
+            // 12. 检查并为 nurse 表添加 wx_notice_openid 字段
+            try {
+                jdbcTemplate.execute("ALTER TABLE `nurse` ADD COLUMN `wx_notice_openid` VARCHAR(64) DEFAULT NULL COMMENT '微信测试号通知OpenID' AFTER `bound_user_id`");
+                log.info("已成功为 nurse 表添加 wx_notice_openid 字段");
+            } catch (Exception e) {
+                // 已存在忽略
+            }
+
             log.info(">>> 数据库表结构与索引升级检查完成！");
         } catch (Exception e) {
             log.error("数据库升级 runner 执行失败", e);

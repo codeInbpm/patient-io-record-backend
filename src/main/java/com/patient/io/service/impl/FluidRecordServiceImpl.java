@@ -54,6 +54,9 @@ public class FluidRecordServiceImpl implements FluidRecordService {
     @Autowired
     private WardMapper wardMapper;
 
+    @Autowired
+    private com.patient.io.service.WechatNoticeService wechatNoticeService;
+
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private void checkRecordPermission(Patient patient) {
@@ -395,12 +398,38 @@ public class FluidRecordServiceImpl implements FluidRecordService {
         summary.setUrineOutput(vo.getUrineOutput());
         summary.setStoolOutput(vo.getStoolOutput());
         summary.setDrainageOutput(vo.getDrainageOutput());
+        Integer prevAbnormal = summary.getIsAbnormal();
         summary.setIsAbnormal(Boolean.TRUE.equals(vo.getIsAbnormal()) ? 1 : 0);
 
         if (isNew) {
             dailySummaryMapper.insert(summary);
         } else {
             dailySummaryMapper.updateById(summary);
+        }
+
+        // 临床出入量异常时实时推送微信模板通知（仅在初次产生异常或由正常变为异常时提醒，防止高频轰炸）
+        if (Boolean.TRUE.equals(vo.getIsAbnormal()) && (isNew || prevAbnormal == null || prevAbnormal == 0)) {
+            try {
+                LambdaQueryWrapper<NursePatientRelation> relQuery = new LambdaQueryWrapper<>();
+                relQuery.and(w -> w.eq(NursePatientRelation::getPatientId, patient.getId())
+                                   .or().eq(NursePatientRelation::getBedId, patient.getBedId()))
+                        .orderByDesc(NursePatientRelation::getId)
+                        .last("LIMIT 1");
+                NursePatientRelation rel = relationMapper.selectOne(relQuery);
+                Long nurseId = rel != null ? rel.getNurseId() : null;
+
+                wechatNoticeService.sendToNurseOrAdmins(
+                        nurseId,
+                        "出入量异常预警",
+                        patient.getBedNo(),
+                        patient.getPatientName(),
+                        StrUtil.isNotBlank(vo.getAbnormalReason()) ? vo.getAbnormalReason() : "出入量差额超过临床安全阈值",
+                        String.format("总入: %s ml, 总出: %s ml, 净差: %s ml",
+                                vo.getTotalIntake(), vo.getTotalOutput(), vo.getNetBalance())
+                );
+            } catch (Exception e) {
+                // 通知异常不影响业务数据写入
+            }
         }
     }
 

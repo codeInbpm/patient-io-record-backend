@@ -25,11 +25,17 @@ mybatis-plus:
       logic-delete-value: 1
       logic-not-delete-value: 0
 
-# 微信小程序配置
+# 微信配置
 wechat:
   miniapp:
     appid: wx416f254041c8763d
     secret: 38a3bb8d6319abfffb07e7f344dec48c
+  # 微信公众平台接口测试号（用于护士微信模板消息强提醒）
+  test-account:
+    appid: wxfa61288e111e915c
+    secret: 71ea98149a9d75c8d6c11deb22f8d58b
+    template-id: CoRuom1t-nV2q84xTA-lsEECSPe9ZmC56gVUEtOAr-Q
+    default-openids: o5auo2CHf41SRsBnyBNxHF0LxV6A,o5auo2EcTn5kXn79BOwnjjZc5eDQ
 
 # JWT 配置
 jwt:
