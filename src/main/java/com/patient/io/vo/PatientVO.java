@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Data
 public class PatientVO {
@@ -50,4 +51,10 @@ public class PatientVO {
     private BigDecimal last24hIntake;
     private BigDecimal last24hOutput;
     private BigDecimal last24hBalance;
+
+    // 记录活跃度：用于「漏记哨兵」
+    private LocalDateTime lastRecordTime;   // 最近一次出入量记录时间
+    private Integer todayRecordCount;       // 今日已记录笔数
+    private Double hoursSinceLastRecord;    // 距上次记录小时数（无记录为 null）
+    private Boolean isMissed;               // 是否需要提醒补记（>4小时无记录）
 }

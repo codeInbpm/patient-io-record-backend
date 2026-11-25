@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -309,6 +310,9 @@ public class PatientServiceImpl extends ServiceImpl<PatientMapper, Patient> impl
         // 查询过去24小时（从当前时刻倒推24小时）动态流水统计
         Map<Long, Patient24hStat> stat24hMap = query24hStats(patientIds);
 
+        // 漏记哨兵：批量取每位患者最近一次记录时间 + 今日记录笔数（一次查询，避免 N+1）
+        RecordPulse pulse = queryRecordPulse(patientIds, today);
+
         // 查出所有关联的护士（责任护士只显示一个，显示最后交班在该病患床位打勾的人）
         List<Long> bedIds = patients.stream().map(Patient::getBedId).filter(Objects::nonNull).collect(Collectors.toList());
         LambdaQueryWrapper<NursePatientRelation> rWrapper = new LambdaQueryWrapper<>();
@@ -368,7 +372,9 @@ public class PatientServiceImpl extends ServiceImpl<PatientMapper, Patient> impl
             boolean isMyDuty = isSuperOrHead || (currentNurseId != null && Objects.equals(currentNurseId, dutyNurseId));
 
             Patient24hStat stat24h = stat24hMap.get(p.getId());
-            voList.add(convertToVO(p, wName, s, stat24h, nName, assignedNames, isMyDuty));
+            PatientVO vo = convertToVO(p, wName, s, stat24h, nName, assignedNames, isMyDuty);
+            applyRecordPulse(vo, p, pulse);
+            voList.add(vo);
         }
 
         return voList;
@@ -422,7 +428,9 @@ public class PatientServiceImpl extends ServiceImpl<PatientMapper, Patient> impl
         Map<Long, Patient24hStat> stat24hMap = query24hStats(Collections.singletonList(patientId));
         Patient24hStat stat24h = stat24hMap.get(patientId);
 
-        return convertToVO(patient, wardName, summary, stat24h, nurseName, assignedNames, isMyDuty);
+        PatientVO detailVO = convertToVO(patient, wardName, summary, stat24h, nurseName, assignedNames, isMyDuty);
+        applyRecordPulse(detailVO, patient, queryRecordPulse(Collections.singletonList(patientId), LocalDate.now()));
+        return detailVO;
     }
 
     @Override
@@ -585,6 +593,83 @@ public class PatientServiceImpl extends ServiceImpl<PatientMapper, Patient> impl
         }
 
         return map;
+    }
+
+    /** 记录活跃度聚合结果（漏记哨兵） */
+    private static class RecordPulse {
+        Map<Long, LocalDateTime> lastTime = new HashMap<>();
+        Map<Long, Integer> todayCount = new HashMap<>();
+
+        void accept(Long patientId, LocalDateTime recordTime, LocalDate recordDate, LocalDate today) {
+            if (patientId == null || recordTime == null) {
+                return;
+            }
+            LocalDateTime current = lastTime.get(patientId);
+            if (current == null || recordTime.isAfter(current)) {
+                lastTime.put(patientId, recordTime);
+            }
+            if (today.equals(recordDate)) {
+                todayCount.merge(patientId, 1, Integer::sum);
+            }
+        }
+    }
+
+    /**
+     * 一次查出近 3 天记录时间，算出「最近一次记录」与「今日笔数」
+     */
+    private RecordPulse queryRecordPulse(List<Long> patientIds, LocalDate today) {
+        RecordPulse pulse = new RecordPulse();
+        if (patientIds == null || patientIds.isEmpty()) {
+            return pulse;
+        }
+        LocalDate from = today.minusDays(2);
+
+        LambdaQueryWrapper<IntakeRecord> iw = new LambdaQueryWrapper<>();
+        iw.select(IntakeRecord::getPatientId, IntakeRecord::getRecordTime, IntakeRecord::getRecordDate)
+                .in(IntakeRecord::getPatientId, patientIds)
+                .ge(IntakeRecord::getRecordDate, from);
+        for (IntakeRecord r : intakeRecordMapper.selectList(iw)) {
+            pulse.accept(r.getPatientId(), r.getRecordTime(), r.getRecordDate(), today);
+        }
+
+        LambdaQueryWrapper<OutputRecord> ow = new LambdaQueryWrapper<>();
+        ow.select(OutputRecord::getPatientId, OutputRecord::getRecordTime, OutputRecord::getRecordDate)
+                .in(OutputRecord::getPatientId, patientIds)
+                .ge(OutputRecord::getRecordDate, from);
+        for (OutputRecord r : outputRecordMapper.selectList(ow)) {
+            pulse.accept(r.getPatientId(), r.getRecordTime(), r.getRecordDate(), today);
+        }
+        return pulse;
+    }
+
+    /**
+     * 把「距上次记录多久 / 是否需要补记」写入 VO
+     */
+    private void applyRecordPulse(PatientVO vo, Patient p, RecordPulse pulse) {
+        LocalDateTime last = pulse.lastTime.get(p.getId());
+        int todayCount = pulse.todayCount.getOrDefault(p.getId(), 0);
+        vo.setTodayRecordCount(todayCount);
+        vo.setLastRecordTime(last);
+
+        boolean needIo = p.getNeedIoRecord() == null || p.getNeedIoRecord() == 1;
+        if (!needIo) {
+            vo.setIsMissed(false);
+            vo.setHoursSinceLastRecord(null);
+            return;
+        }
+
+        if (last == null) {
+            vo.setHoursSinceLastRecord(null);
+            // 非今日新入院的患者，至今没有任何记录 -> 需要补记
+            boolean admittedBeforeToday = p.getAdmissionDate() != null && p.getAdmissionDate().isBefore(LocalDate.now());
+            vo.setIsMissed(admittedBeforeToday);
+            return;
+        }
+
+        long minutes = Duration.between(last, LocalDateTime.now()).toMinutes();
+        double hours = Math.max(0, minutes / 60.0);
+        vo.setHoursSinceLastRecord(Math.round(hours * 10) / 10.0);
+        vo.setIsMissed(hours >= 4);
     }
 
     private PatientVO convertToVO(Patient p, String wardName, DailySummary summary, String assignedNurseName) {

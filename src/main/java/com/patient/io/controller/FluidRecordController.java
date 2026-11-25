@@ -1,11 +1,15 @@
 package com.patient.io.controller;
 
 import com.patient.io.common.Result;
+import com.patient.io.dto.CorrectionRequestDTO;
 import com.patient.io.dto.FluidQueryDTO;
 import com.patient.io.dto.RecordIntakeDTO;
 import com.patient.io.dto.RecordOutputDTO;
 import com.patient.io.entity.DailySummary;
 import com.patient.io.service.FluidRecordService;
+import com.patient.io.service.RecordAuditService;
+import com.patient.io.service.RecordCorrectionService;
+import com.patient.io.vo.CorrectionRequestVO;
 import com.patient.io.vo.DailyBalanceVO;
 import com.patient.io.vo.FluidQueryVO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +28,12 @@ public class FluidRecordController {
     @Autowired
     private FluidRecordService fluidRecordService;
 
+    @Autowired
+    private RecordAuditService recordAuditService;
+
+    @Autowired
+    private RecordCorrectionService recordCorrectionService;
+
     @PostMapping("/intake")
     public Result<Long> recordIntake(@RequestBody @Validated RecordIntakeDTO dto) {
         return Result.success(fluidRecordService.recordIntake(dto));
@@ -35,14 +45,46 @@ public class FluidRecordController {
     }
 
     @DeleteMapping("/intake/{id}")
-    public Result<Void> deleteIntakeRecord(@PathVariable Long id) {
+    public Result<Void> deleteIntakeRecord(@PathVariable Long id,
+                                           @RequestParam(required = false) String reason) {
+        recordAuditService.logIntakeDelete(id, reason);
         fluidRecordService.deleteIntakeRecord(id);
         return Result.success();
     }
 
     @DeleteMapping("/output/{id}")
-    public Result<Void> deleteOutputRecord(@PathVariable Long id) {
+    public Result<Void> deleteOutputRecord(@PathVariable Long id,
+                                           @RequestParam(required = false) String reason) {
+        recordAuditService.logOutputDelete(id, reason);
         fluidRecordService.deleteOutputRecord(id);
+        return Result.success();
+    }
+
+    /**
+     * 患者反馈「这条记错了」，由护士核对后修正
+     */
+    @PostMapping("/correction-request")
+    public Result<Void> submitCorrectionRequest(@RequestBody @Validated CorrectionRequestDTO dto) {
+        recordCorrectionService.submit(dto);
+        return Result.success();
+    }
+
+    /**
+     * 护士端待核对列表
+     */
+    @GetMapping("/correction-requests")
+    public Result<List<CorrectionRequestVO>> listCorrectionRequests(
+            @RequestParam(required = false) Long wardId,
+            @RequestParam(required = false, defaultValue = "PENDING") String status) {
+        return Result.success(recordCorrectionService.listPending(wardId, status));
+    }
+
+    /**
+     * 护士处理完标记已处理
+     */
+    @PostMapping("/correction-requests/{id}/handled")
+    public Result<Void> handleCorrectionRequest(@PathVariable Long id) {
+        recordCorrectionService.markHandled(id);
         return Result.success();
     }
 

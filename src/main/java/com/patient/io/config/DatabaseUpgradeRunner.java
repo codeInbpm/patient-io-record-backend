@@ -277,6 +277,57 @@ public class DatabaseUpgradeRunner implements CommandLineRunner {
                 // 已存在忽略
             }
 
+            // 13. 出入量记录删除留痕表（谁删的、删了什么、为什么删）
+            try {
+                jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS `record_delete_log` (" +
+                        "`id` BIGINT NOT NULL AUTO_INCREMENT," +
+                        "`category` VARCHAR(16) NOT NULL COMMENT 'INTAKE/OUTPUT'," +
+                        "`record_id` BIGINT NOT NULL COMMENT '被删除记录ID'," +
+                        "`patient_id` BIGINT DEFAULT NULL COMMENT '患者ID'," +
+                        "`amount` DECIMAL(10,2) DEFAULT NULL COMMENT '删除时的量(ml)'," +
+                        "`item_name` VARCHAR(128) DEFAULT NULL COMMENT '品名/类型'," +
+                        "`record_time` DATETIME DEFAULT NULL COMMENT '原记录时间'," +
+                        "`reason` VARCHAR(255) DEFAULT NULL COMMENT '删除原因'," +
+                        "`operator_id` BIGINT DEFAULT NULL COMMENT '操作人ID'," +
+                        "`operator_role` VARCHAR(32) DEFAULT NULL COMMENT '操作人角色'," +
+                        "`create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '删除时间'," +
+                        "PRIMARY KEY (`id`)," +
+                        "KEY `idx_patient` (`patient_id`)," +
+                        "KEY `idx_time` (`create_time`)" +
+                        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='出入量删除留痕'");
+                log.info("已检查并确保 record_delete_log 删除留痕表创建成功");
+            } catch (Exception e) {
+                log.warn("创建 record_delete_log 表异常: {}", e.getMessage());
+            }
+
+            // 7. 患者「记错了」待核对请求表
+            try {
+                jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS `record_correction_request` (" +
+                        "`id` BIGINT NOT NULL AUTO_INCREMENT," +
+                        "`record_id` BIGINT NOT NULL COMMENT '反馈的记录ID'," +
+                        "`category` VARCHAR(16) NOT NULL COMMENT 'INTAKE/OUTPUT'," +
+                        "`patient_id` BIGINT NOT NULL COMMENT '患者ID'," +
+                        "`amount` DECIMAL(10,2) DEFAULT NULL COMMENT '记录量快照'," +
+                        "`item_name` VARCHAR(128) DEFAULT NULL COMMENT '品名快照'," +
+                        "`record_time` DATETIME DEFAULT NULL COMMENT '原记录时间'," +
+                        "`remark` VARCHAR(255) DEFAULT NULL COMMENT '原记录备注'," +
+                        "`reason` VARCHAR(255) DEFAULT NULL COMMENT '患者说明哪里错了'," +
+                        "`requester_id` BIGINT DEFAULT NULL COMMENT '提交人ID'," +
+                        "`requester_role` VARCHAR(32) DEFAULT NULL COMMENT '提交人角色'," +
+                        "`status` VARCHAR(16) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/HANDLED'," +
+                        "`handler_id` BIGINT DEFAULT NULL COMMENT '处理人ID'," +
+                        "`handle_time` DATETIME DEFAULT NULL COMMENT '处理时间'," +
+                        "`create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '提交时间'," +
+                        "PRIMARY KEY (`id`)," +
+                        "KEY `idx_status` (`status`)," +
+                        "KEY `idx_record` (`record_id`, `category`)," +
+                        "KEY `idx_patient` (`patient_id`)" +
+                        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='患者记错反馈（待核对）'");
+                log.info("已检查并确保 record_correction_request 待核对表创建成功");
+            } catch (Exception e) {
+                log.warn("创建 record_correction_request 表异常: {}", e.getMessage());
+            }
+
             log.info(">>> 数据库表结构与索引升级检查完成！");
         } catch (Exception e) {
             log.error("数据库升级 runner 执行失败", e);

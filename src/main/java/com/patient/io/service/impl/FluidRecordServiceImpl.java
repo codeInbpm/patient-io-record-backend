@@ -158,8 +158,24 @@ public class FluidRecordServiceImpl implements FluidRecordService {
     public void deleteIntakeRecord(Long recordId) {
         IntakeRecord record = intakeRecordMapper.selectById(recordId);
         if (record != null) {
+            checkDeletePermission(record.getRecorderId(), record.getRecorderRole(), record.getRecordTime());
             intakeRecordMapper.deleteById(recordId);
             refreshDailySummary(record.getPatientId(), record.getRecordDate());
+        }
+    }
+
+    /**
+     * 患者只能撤销本人 5 分钟内填写的记录；医护按原权限执行
+     */
+    private void checkDeletePermission(Long recorderId, String recorderRole, LocalDateTime recordTime) {
+        if (!"PATIENT".equals(UserContext.getRole())) {
+            return;
+        }
+        if (recorderId == null || !recorderId.equals(UserContext.getUserId()) || !"PATIENT".equals(recorderRole)) {
+            throw new BusinessException(403, "只能撤销本人填写的记录");
+        }
+        if (recordTime != null && recordTime.isBefore(LocalDateTime.now().minusMinutes(5))) {
+            throw new BusinessException("超过 5 分钟的记录无法自行撤销，请联系护士");
         }
     }
 
@@ -168,6 +184,7 @@ public class FluidRecordServiceImpl implements FluidRecordService {
     public void deleteOutputRecord(Long recordId) {
         OutputRecord record = outputRecordMapper.selectById(recordId);
         if (record != null) {
+            checkDeletePermission(record.getRecorderId(), record.getRecorderRole(), record.getRecordTime());
             outputRecordMapper.deleteById(recordId);
             refreshDailySummary(record.getPatientId(), record.getRecordDate());
         }
@@ -227,6 +244,7 @@ public class FluidRecordServiceImpl implements FluidRecordService {
 
             RecordItemVO item = new RecordItemVO();
             item.setId(r.getId());
+            item.setPatientId(r.getPatientId());
             item.setCategory("INTAKE");
             item.setType(r.getIntakeType());
             item.setTypeText("入量 - " + formatIntakeType(r.getIntakeType(), r.getItemName()));
@@ -274,6 +292,7 @@ public class FluidRecordServiceImpl implements FluidRecordService {
 
             RecordItemVO item = new RecordItemVO();
             item.setId(r.getId());
+            item.setPatientId(r.getPatientId());
             item.setCategory("OUTPUT");
             item.setType(r.getOutputType());
             item.setTypeText("出量 - " + formatOutputType(r.getOutputType()));

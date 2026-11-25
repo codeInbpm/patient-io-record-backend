@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 @Data
 public class RecordItemVO {
     private Long id;
+    private Long patientId;
     private String category;      // INTAKE (入量), OUTPUT (出量)
     private String type;          // ORAL, IV, URINE, STOOL 等
     private String typeText;      // 口服-温水, 尿量 等展示文本

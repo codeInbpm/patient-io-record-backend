@@ -95,6 +95,7 @@ public class WardServiceImpl extends ServiceImpl<WardMapper, Ward> implements Wa
         BigDecimal totalOutput = BigDecimal.ZERO;
         int recordedCount = 0;
         int abnormalCount = 0;
+        int missedCount = 0;
 
         for (PatientVO p : patients) {
             if (p.getTodayIntake() != null) {
@@ -110,6 +111,9 @@ public class WardServiceImpl extends ServiceImpl<WardMapper, Ward> implements Wa
             if (Boolean.TRUE.equals(p.getIsAbnormal())) {
                 abnormalCount++;
             }
+            if (Boolean.TRUE.equals(p.getIsMissed())) {
+                missedCount++;
+            }
         }
 
         WardOverviewVO vo = new WardOverviewVO();
@@ -118,6 +122,7 @@ public class WardServiceImpl extends ServiceImpl<WardMapper, Ward> implements Wa
         vo.setTotalPatients(patients.size());
         vo.setRecordedPatients(recordedCount);
         vo.setAbnormalCount(abnormalCount);
+        vo.setMissedCount(missedCount);
         vo.setWardTotalIntake(totalIntake);
         vo.setWardTotalOutput(totalOutput);
         vo.setPatients(patients);
