@@ -12,7 +12,9 @@ import com.patient.io.entity.*;
 import com.patient.io.mapper.*;
 import com.patient.io.service.FluidRecordService;
 import com.patient.io.vo.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +29,7 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class FluidRecordServiceImpl implements FluidRecordService {
 
@@ -57,7 +60,59 @@ public class FluidRecordServiceImpl implements FluidRecordService {
     @Autowired
     private com.patient.io.service.WechatNoticeService wechatNoticeService;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+    /**
+     * 批量取这批记录的「记错了」处理状态，key = recordId:category。
+     * 一次查询搞定，避免每条流水都打一次库。
+     */
+    private Map<String, CorrectionState> queryCorrectionStatus(Collection<Long> recordIds) {
+        if (recordIds == null || recordIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        String placeholders = recordIds.stream().map(id -> "?").collect(Collectors.joining(","));
+        String sql = "SELECT id, record_id, category, status FROM record_correction_request " +
+                "WHERE record_id IN (" + placeholders + ") ORDER BY id ASC";
+        Map<String, CorrectionState> statusMap = new HashMap<>();
+        jdbcTemplate.query(sql, rs -> {
+            statusMap.put(rs.getLong("record_id") + ":" + rs.getString("category"),
+                    new CorrectionState(rs.getLong("id"), rs.getString("status")));
+        }, recordIds.toArray());
+        return statusMap;
+    }
+
+    /** 一条记录的核对状态快照 */
+    private static class CorrectionState {
+        private final Long requestId;
+        private final String status;
+
+        CorrectionState(Long requestId, String status) {
+            this.requestId = requestId;
+            this.status = status;
+        }
+    }
+
+    /**
+     * 记录被删掉（护士修正/直接删除，或患者自己撤销）就说明核对已经结束，
+     * 把挂着的待核对单自动收口，否则护士首页会一直堆着已经处理的请求。
+     */
+    private void closeCorrectionRequests(Long recordId, String category) {
+        if (recordId == null) {
+            return;
+        }
+        try {
+            jdbcTemplate.update(
+                    "UPDATE record_correction_request SET status = 'HANDLED', handler_id = ?, handle_time = ? " +
+                            "WHERE record_id = ? AND category = ? AND status = 'PENDING'",
+                    UserContext.getUserId(), LocalDateTime.now(), recordId, category);
+        } catch (Exception e) {
+            // 核对单收口失败不能影响记录本身的增删
+            log.warn("关闭待核对请求失败: recordId={}, category={}", recordId, category, e);
+        }
+    }
 
     private void checkRecordPermission(Patient patient) {
         String role = UserContext.getRole();
@@ -162,6 +217,8 @@ public class FluidRecordServiceImpl implements FluidRecordService {
             intakeRecordMapper.deleteById(recordId);
             refreshDailySummary(record.getPatientId(), record.getRecordDate());
         }
+        // 不管是护士核实后删的，还是患者自己撤销的，这条记录的核对单都该收口
+        closeCorrectionRequests(recordId, "INTAKE");
     }
 
     /**
@@ -188,6 +245,7 @@ public class FluidRecordServiceImpl implements FluidRecordService {
             outputRecordMapper.deleteById(recordId);
             refreshDailySummary(record.getPatientId(), record.getRecordDate());
         }
+        closeCorrectionRequests(recordId, "OUTPUT");
     }
 
     @Override
@@ -318,6 +376,18 @@ public class FluidRecordServiceImpl implements FluidRecordService {
 
         // 时间倒序排列流水
         timeline.sort(Comparator.comparing(RecordItemVO::getRecordTime).reversed());
+
+        // 患者说「记错了」的状态随流水一起返回：患者端要看到「护士已核对」的回执，
+        // 护士端也要知道这条有争议，不能当成可信数据
+        Map<String, CorrectionState> corrStatusMap = queryCorrectionStatus(
+                timeline.stream().map(RecordItemVO::getId).collect(Collectors.toList()));
+        for (RecordItemVO item : timeline) {
+            CorrectionState state = corrStatusMap.get(item.getId() + ":" + item.getCategory());
+            if (state != null) {
+                item.setCorrectionStatus(state.status);
+                item.setCorrectionRequestId(state.requestId);
+            }
+        }
 
         BigDecimal netBalance = totalIntake.subtract(totalOutput);
 

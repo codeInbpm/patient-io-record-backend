@@ -165,7 +165,7 @@ public class ShiftHandoverSpecialServiceImpl implements ShiftHandoverSpecialServ
             item.put("detail", inf.getUsageType() + " " + inf.getCapacity() + "ml");
 
             if ("维持液".equalsIgnoreCase(inf.getUsageType()) || "maint".equalsIgnoreCase(inf.getUsageType())) {
-                item.put("drug", StrUtil.isNotBlank(inf.getRemark()) ? inf.getRemark() : inf.getUsageType());
+                item.put("drug", resolveDrugText(inf));
                 if (inf.getStartTime() != null) {
                     item.put("time", inf.getStartTime().format(DateTimeFormatter.ofPattern("HH:mm")));
                 }
@@ -333,5 +333,32 @@ public class ShiftHandoverSpecialServiceImpl implements ShiftHandoverSpecialServ
             BeanUtils.copyProperties(r, vo);
             return vo;
         }).collect(Collectors.toList());
+    }
+
+    /**
+     * 交班单展示用药：优先取结构化明细，其次回落到 remark 文本
+     */
+    private String resolveDrugText(InfusionRecord inf) {
+        if (StrUtil.isNotBlank(inf.getDrugJson())) {
+            try {
+                JSONArray arr = JSON.parseArray(inf.getDrugJson());
+                List<String> parts = new ArrayList<>();
+                for (int i = 0; i < arr.size(); i++) {
+                    JSONObject d = arr.getJSONObject(i);
+                    String name = d == null ? null : d.getString("name");
+                    if (StrUtil.isBlank(name)) {
+                        continue;
+                    }
+                    String spec = d.getString("spec");
+                    parts.add(StrUtil.isBlank(spec) ? name : name + " " + spec);
+                }
+                if (!parts.isEmpty()) {
+                    return String.join(" + ", parts);
+                }
+            } catch (Exception ignored) {
+                // 历史脏数据直接回落
+            }
+        }
+        return StrUtil.isNotBlank(inf.getRemark()) ? inf.getRemark() : inf.getUsageType();
     }
 }

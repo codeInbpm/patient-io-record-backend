@@ -37,6 +37,9 @@ public class InfusionRecord implements Serializable {
     private Long endNurseId;
     private String endNurseName;
     private String remark;
+
+    /** 结构化用药明细 JSON 数组，与 remark 并存以兼容历史报表 */
+    private String drugJson;
     private Integer remindStatus; // 提醒状态: 0-未提醒, 1-即将结束已提醒, 2-超时已提醒
 
     @TableLogic

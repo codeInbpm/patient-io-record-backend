@@ -29,6 +29,11 @@ public class InfusionCreateDTO {
     private String remark;
 
     /**
+     * 结构化用药明细（护士端从药品字典选择）。为空时降级为 remark 自由文本。
+     */
+    private List<InfusionDrugDTO> drugs;
+
+    /**
      * 上传的药袋/穿刺部位图片URL列表
      */
     private List<String> imageUrls;

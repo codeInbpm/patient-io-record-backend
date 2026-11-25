@@ -21,7 +21,8 @@ public class WebConfig implements WebMvcConfigurer {
                         "/v1/auth/login",
                         "/v1/auth/mock-login",
                         "/v1/admin/auth/login",
-                        "/v1/dict/**",
+                        // 注意：/v1/dict/** 不在此排除，交由 AuthInterceptor 内部按 GET/写操作区分，
+                        // 否则药品字典的新增/删除会被匿名放行
                         "/doc.html",
                         "/swagger-resources/**",
                         "/webjars/**"

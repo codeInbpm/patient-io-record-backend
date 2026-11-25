@@ -70,6 +70,15 @@ public class FluidRecordController {
     }
 
     /**
+     * 患者上报异常症状（血尿、黑便、水样便），护士端立即出现待处理
+     */
+    @PostMapping("/symptom-alert")
+    public Result<Void> reportSymptom(@RequestBody @Validated com.patient.io.dto.SymptomAlertDTO dto) {
+        recordCorrectionService.reportSymptom(dto);
+        return Result.success();
+    }
+
+    /**
      * 护士端待核对列表
      */
     @GetMapping("/correction-requests")
@@ -85,6 +94,32 @@ public class FluidRecordController {
     @PostMapping("/correction-requests/{id}/handled")
     public Result<Void> handleCorrectionRequest(@PathVariable Long id) {
         recordCorrectionService.markHandled(id);
+        return Result.success();
+    }
+
+    /**
+     * 护士驳回：记录不成立，从当天出入量中移除，退回给患者重新记
+     */
+    @PostMapping("/correction-requests/{id}/reject")
+    public Result<Void> rejectCorrectionRequest(@PathVariable Long id) {
+        recordCorrectionService.reject(id);
+        return Result.success();
+    }
+
+    /**
+     * 患者端：被护士退回、还没重记的条目
+     */
+    @GetMapping("/correction-requests/my-rejected")
+    public Result<List<CorrectionRequestVO>> listMyRejectedCorrections() {
+        return Result.success(recordCorrectionService.listMyRejected());
+    }
+
+    /**
+     * 患者按驳回要求重记完成后，清掉这条待办
+     */
+    @PostMapping("/correction-requests/{id}/re-recorded")
+    public Result<Void> markCorrectionReRecorded(@PathVariable Long id) {
+        recordCorrectionService.markReRecorded(id);
         return Result.success();
     }
 

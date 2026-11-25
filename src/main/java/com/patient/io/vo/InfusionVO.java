@@ -1,6 +1,7 @@
 package com.patient.io.vo;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.patient.io.dto.InfusionDrugDTO;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -36,6 +37,15 @@ public class InfusionVO {
     private Long endNurseId;
     private String endNurseName;
     private String remark;
+
+    /** 结构化用药明细 JSON，前端按需解析 */
+    private String drugJson;
+
+    /**
+     * 结构化用药明细（已解析），前端逐条展示；
+     * 历史数据没有 drug_json 时为空数组，前端回退到 remark 文本
+     */
+    private List<InfusionDrugDTO> drugs;
 
     /**
      * 图片列表

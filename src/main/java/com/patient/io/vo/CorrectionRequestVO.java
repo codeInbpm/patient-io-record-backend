@@ -22,6 +22,7 @@ public class CorrectionRequestVO {
     private LocalDateTime recordTime;
     private String remark;        // 原记录备注（含患者填写说明）
     private String reason;        // 患者说明哪里错了
-    private String status;        // PENDING / HANDLED
+    private String status;        // PENDING / HANDLED / REJECTED / RECORDED
     private LocalDateTime createTime;
+    private LocalDateTime handleTime;
 }

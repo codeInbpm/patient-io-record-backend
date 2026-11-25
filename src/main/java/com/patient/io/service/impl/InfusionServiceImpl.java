@@ -2,11 +2,13 @@ package com.patient.io.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson2.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.patient.io.common.BusinessException;
 import com.patient.io.common.UserContext;
 import com.patient.io.dto.InfusionCreateDTO;
+import com.patient.io.dto.InfusionDrugDTO;
 import com.patient.io.dto.InfusionEndDTO;
 import com.patient.io.entity.*;
 import com.patient.io.mapper.*;
@@ -36,6 +38,7 @@ public class InfusionServiceImpl implements InfusionService {
     private final PatientMapper patientMapper;
     private final NurseMapper nurseMapper;
     private final SysUserMapper sysUserMapper;
+    private final DrugDictMapper drugDictMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -60,6 +63,18 @@ public class InfusionServiceImpl implements InfusionService {
             }
         }
 
+        // 结构化用药：药品字典选择结果，同时拼出可读文本兼容历史报表
+        // 药品文本在前，自由备注（如滴速）在后；都为空时保持为空，兼容旧客户端
+        String drugJson = buildDrugJson(dto.getDrugs());
+        String drugsText = buildDrugText(dto.getDrugs());
+        String extraRemark = StrUtil.trimToNull(dto.getRemark());
+        String drugText;
+        if (drugsText != null) {
+            drugText = extraRemark != null ? drugsText + " | " + extraRemark : drugsText;
+        } else {
+            drugText = extraRemark;
+        }
+
         // 1. 如果勾选了同步写入入量记录，先写入 intake_record
         Long intakeRecordId = null;
         if (Boolean.TRUE.equals(dto.getSyncToIntake())) {
@@ -74,7 +89,7 @@ public class InfusionServiceImpl implements InfusionService {
             intake.setRecordDate(intake.getRecordTime().toLocalDate());
             intake.setRecorderId(currentUserId != null ? currentUserId : 1L);
             intake.setRecorderRole("NURSE");
-            intake.setRemark("由补液记录单自动生成" + (StrUtil.isNotBlank(dto.getRemark()) ? ": " + dto.getRemark() : ""));
+            intake.setRemark("由补液记录单自动生成" + (StrUtil.isNotBlank(drugText) ? ": " + drugText : ""));
             intakeRecordMapper.insert(intake);
             intakeRecordId = intake.getId();
         }
@@ -104,7 +119,8 @@ public class InfusionServiceImpl implements InfusionService {
         record.setIntakeRecordId(intakeRecordId);
         record.setNurseId(nurseId);
         record.setNurseName(nurseName);
-        record.setRemark(dto.getRemark());
+        record.setRemark(drugText);
+        record.setDrugJson(drugJson);
         infusionRecordMapper.insert(record);
 
         // 3. 关联保存图片
@@ -283,6 +299,7 @@ public class InfusionServiceImpl implements InfusionService {
             InfusionVO vo = new InfusionVO();
             BeanUtils.copyProperties(record, vo);
             vo.setImageUrls(imageMap.getOrDefault(record.getId(), Collections.emptyList()));
+            vo.setDrugs(parseDrugJson(record.getDrugJson()));
 
             if ("INFUSING".equals(record.getStatus())) {
                 LocalDateTime start = record.getStartTime();
@@ -315,5 +332,67 @@ public class InfusionServiceImpl implements InfusionService {
 
             return vo;
         }).collect(Collectors.toList());
+    }
+
+    /**
+     * 解析持久化的用药 JSON；历史记录没有该字段时返回空集合，由前端回退到 remark 文本
+     */
+    private List<InfusionDrugDTO> parseDrugJson(String json) {
+        if (StrUtil.isBlank(json)) {
+            return Collections.emptyList();
+        }
+        try {
+            List<InfusionDrugDTO> list = JSON.parseArray(json, InfusionDrugDTO.class);
+            return list == null ? Collections.emptyList() : list;
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * 结构化用药 -> JSON（用于持久化与后续统计）
+     */
+    private String buildDrugJson(List<InfusionDrugDTO> drugs) {        if (CollUtil.isEmpty(drugs)) {
+            return null;
+        }
+        List<InfusionDrugDTO> valid = drugs.stream()
+                .filter(d -> d != null && StrUtil.isNotBlank(d.getName()))
+                .collect(Collectors.toList());
+        return valid.isEmpty() ? null : JSON.toJSONString(valid);
+    }
+
+    /**
+     * 结构化用药 -> 可读文本，如「0.9%氯化钠注射液 250ml:2.25g 250ml + 注射用头孢曲松钠 1.0g 1支」
+     * 同时累加字典使用频次，越常用的药在联想列表越靠前
+     */
+    private String buildDrugText(List<InfusionDrugDTO> drugs) {
+        if (CollUtil.isEmpty(drugs)) {
+            return null;
+        }
+        List<String> parts = new ArrayList<>();
+        for (InfusionDrugDTO d : drugs) {
+            if (d == null || StrUtil.isBlank(d.getName())) {
+                continue;
+            }
+            StringBuilder sb = new StringBuilder(d.getName().trim());
+            if (StrUtil.isNotBlank(d.getSpec())) {
+                sb.append(' ').append(d.getSpec().trim());
+            }
+            if (StrUtil.isNotBlank(d.getDose())) {
+                sb.append(' ').append(d.getDose().trim());
+                if (StrUtil.isNotBlank(d.getUnit())) {
+                    sb.append(d.getUnit().trim());
+                }
+            }
+            parts.add(sb.toString());
+            if (d.getId() != null && !Boolean.TRUE.equals(d.getManual())) {
+                try {
+                    drugDictMapper.increaseUseCount(d.getId());
+                } catch (Exception ignored) {
+                    // 频次累加失败不影响主流程
+                }
+            }
+        }
+        return parts.isEmpty() ? null : String.join(" + ", parts);
     }
 }

@@ -21,4 +21,11 @@ public class RecordItemVO {
     private String recorderName;  // 录入人姓名，如 李丽护士、李建国(患者)
     private String recorderText;  // 人性化展示文本，如 李丽护士录入、患者本人录入
     private String remark;
+    /**
+     * 患者反馈「这条记错了」的处理状态：NULL=没有反馈，PENDING=等护士核对，HANDLED=护士已核对。
+     * 患者端靠它显示回执，否则刷新一次按钮就复原、患者会反复提交。
+     */
+    private String correctionStatus;
+    /** 对应的待核对请求 ID，护士在详情页就地「确认无误」时要带上它 */
+    private Long correctionRequestId;
 }

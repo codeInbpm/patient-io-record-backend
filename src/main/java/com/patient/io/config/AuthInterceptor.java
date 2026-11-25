@@ -26,14 +26,15 @@ public class AuthInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        // 2. 兜底放行登录与公开字典白名单接口
+        // 2. 兜底放行登录与公开字典查询接口；字典的增删改仍需登录
         String uri = request.getRequestURI();
-        if (uri.contains("/admin/auth/login") 
-                || uri.contains("/auth/wx-login") 
+        boolean dictRead = uri.contains("/dict/") && "GET".equalsIgnoreCase(request.getMethod());
+        if (uri.contains("/admin/auth/login")
+                || uri.contains("/auth/wx-login")
                 || uri.contains("/auth/mock-login")
-                || uri.contains("/dict/")
-                || uri.contains("/swagger") 
-                || uri.contains("/webjars") 
+                || dictRead
+                || uri.contains("/swagger")
+                || uri.contains("/webjars")
                 || uri.contains("/doc.html")) {
             return true;
         }

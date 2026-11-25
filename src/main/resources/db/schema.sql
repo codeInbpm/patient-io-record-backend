@@ -497,3 +497,43 @@ INSERT IGNORE INTO `nurse_patient_relation` (`id`, `nurse_id`, `patient_id`, `be
 -- 原先由 DatabaseUpgradeRunner 在启动时自动建表/改表并记录版本，现改为手动执行 SQL，
 -- 该表及启动检查逻辑均已移除（线上库中的 db_schema_version 已删除）。
 -- ========================================================
+
+-- ========================================================
+-- 药品字典（补液用药）与补液记录结构化用药
+-- 2026-11-25
+-- ========================================================
+
+CREATE TABLE IF NOT EXISTS `drug_dict` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `hospital_id` bigint NOT NULL DEFAULT '1' COMMENT '医院ID(租户隔离)',
+  `src_type` tinyint NOT NULL DEFAULT '0' COMMENT '来源: 0-手工维护, 1-ShowAPI候选, 2-医保目录',
+  `src_id` varchar(64) DEFAULT NULL COMMENT '外部数据源主键',
+  `generic_name` varchar(128) NOT NULL COMMENT '通用名',
+  `trade_name` varchar(128) DEFAULT NULL COMMENT '商品名',
+  `alias_names` varchar(255) DEFAULT NULL COMMENT '别名/俗名，英文逗号分隔',
+  `spec` varchar(128) DEFAULT NULL COMMENT '规格原文',
+  `spec_volume` int DEFAULT NULL COMMENT '归一装量(ml)',
+  `spec_dose` varchar(64) DEFAULT NULL COMMENT '归一含药量',
+  `dosage_form` varchar(64) DEFAULT NULL COMMENT '剂型',
+  `unit` varchar(16) DEFAULT NULL COMMENT '计量单位',
+  `default_dose` varchar(32) DEFAULT NULL COMMENT '默认单次剂量',
+  `route` varchar(32) DEFAULT NULL COMMENT '给药途径',
+  `is_high_alert` tinyint NOT NULL DEFAULT '0' COMMENT '高警示药品: 0-否, 1-是',
+  `pinyin_full` varchar(255) DEFAULT NULL COMMENT '全拼',
+  `pinyin_initial` varchar(128) DEFAULT NULL COMMENT '首字母',
+  `status` tinyint NOT NULL DEFAULT '1' COMMENT '0-待审核, 1-已启用, 2-停用',
+  `use_count` int NOT NULL DEFAULT '0' COMMENT '使用频次(排序用)',
+  `sort_order` int NOT NULL DEFAULT '9999' COMMENT '排序',
+  `is_deleted` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_hosp_status` (`hospital_id`,`status`,`is_deleted`),
+  KEY `idx_pinyin_initial` (`pinyin_initial`),
+  KEY `idx_generic_name` (`generic_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='药品字典(补液用药)';
+
+-- 补液记录：结构化用药明细（JSON 数组），与 remark 文本并存以兼容历史报表
+-- 重复执行会报 Duplicate column，已存在则忽略
+ALTER TABLE `infusion_record`
+  ADD COLUMN `drug_json` text DEFAULT NULL COMMENT '结构化用药明细JSON' AFTER `remark`;

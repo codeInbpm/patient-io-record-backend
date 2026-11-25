@@ -96,6 +96,13 @@
             <version>8.5.7</version>
         </dependency>
 
+        <!-- 药品字典拼音检索（全拼/首字母） -->
+        <dependency>
+            <groupId>com.belerweb</groupId>
+            <artifactId>pinyin4j</artifactId>
+            <version>2.5.1</version>
+        </dependency>
+
         <!-- Spring Boot Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
