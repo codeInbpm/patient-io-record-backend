@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/v1/infusion")
@@ -76,13 +77,28 @@ public class InfusionController {
             @RequestParam(value = "wardId", required = false) Long wardId,
             @RequestParam(value = "bedNo", required = false) String bedNo,
             @RequestParam(value = "patientName", required = false) String patientName,
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "drugName", required = false) String drugName,
+            @RequestParam(value = "nurseName", required = false) String nurseName,
             @RequestParam(value = "status", required = false) String status,
             @RequestParam(value = "startDate", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate startDate,
             @RequestParam(value = "endDate", required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate endDate,
+            @RequestParam(value = "usageType", required = false) String usageType,
+            @RequestParam(value = "hasDrug", required = false) Boolean hasDrug,
+            @RequestParam(value = "syncedIntake", required = false) Boolean syncedIntake,
             @RequestParam(value = "current", defaultValue = "1") long current,
             @RequestParam(value = "size", defaultValue = "10") long size) {
-        Page<InfusionVO> page = infusionService.pageInfusions(wardId, bedNo, patientName, status, startDate, endDate, current, size);
+        Page<InfusionVO> page = infusionService.pageInfusions(wardId, bedNo, patientName, keyword, drugName, nurseName, status,
+                startDate, endDate, usageType, hasDrug, syncedIntake, current, size);
         return Result.success(page);
+    }
+
+    /**
+     * 药品结构化覆盖率（有多少补液记录真正记了结构化药品）
+     */
+    @GetMapping("/drug-coverage")
+    public Result<Map<String, Object>> drugCoverage() {
+        return Result.success(infusionService.drugCoverage());
     }
 
     /**

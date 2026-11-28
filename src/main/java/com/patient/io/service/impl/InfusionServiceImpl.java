@@ -238,7 +238,11 @@ public class InfusionServiceImpl implements InfusionService {
     }
 
     @Override
-    public Page<InfusionVO> pageInfusions(Long wardId, String bedNo, String patientName, String status, LocalDate startDate, LocalDate endDate, long current, long size) {
+    public Page<InfusionVO> pageInfusions(Long wardId, String bedNo, String patientName, String keyword,
+                                          String drugName, String nurseName, String status,
+                                          LocalDate startDate, LocalDate endDate,
+                                          String usageType, Boolean hasDrug, Boolean syncedIntake,
+                                          long current, long size) {
         LambdaQueryWrapper<InfusionRecord> wrapper = new LambdaQueryWrapper<>();
         if (wardId != null && wardId > 0) {
             wrapper.eq(InfusionRecord::getWardId, wardId);
@@ -249,6 +253,24 @@ public class InfusionServiceImpl implements InfusionService {
         if (StrUtil.isNotBlank(patientName)) {
             wrapper.like(InfusionRecord::getPatientName, patientName.trim());
         }
+        // 一个搜索框同时搜床号和姓名：必须包一层 OR，否则变成「床号含 X 且姓名含 X」，永远查不到
+        if (StrUtil.isNotBlank(keyword)) {
+            String kw = keyword.trim();
+            wrapper.and(w -> w.like(InfusionRecord::getBedNo, kw)
+                    .or().like(InfusionRecord::getPatientName, kw));
+        }
+        // 药品名称模糊查询：同时兼容结构化 drug_json 与历史 remark 文本
+        if (StrUtil.isNotBlank(drugName)) {
+            String dn = drugName.trim();
+            wrapper.and(w -> w.like(InfusionRecord::getDrugJson, dn)
+                    .or().like(InfusionRecord::getRemark, dn));
+        }
+        // 责任护士模糊查询：同时匹配经办护士与拔针护士
+        if (StrUtil.isNotBlank(nurseName)) {
+            String nn = nurseName.trim();
+            wrapper.and(w -> w.like(InfusionRecord::getNurseName, nn)
+                    .or().like(InfusionRecord::getEndNurseName, nn));
+        }
         if (StrUtil.isNotBlank(status)) {
             wrapper.eq(InfusionRecord::getStatus, status.trim());
         }
@@ -257,6 +279,20 @@ public class InfusionServiceImpl implements InfusionService {
         }
         if (endDate != null) {
             wrapper.le(InfusionRecord::getStartTime, endDate.atTime(23, 59, 59));
+        }
+        if (StrUtil.isNotBlank(usageType)) {
+            wrapper.eq(InfusionRecord::getUsageType, usageType.trim());
+        }
+        // 有没有结构化药品：这是覆盖率治理期最常用的筛选项
+        if (hasDrug != null) {
+            if (hasDrug) {
+                wrapper.isNotNull(InfusionRecord::getDrugJson).ne(InfusionRecord::getDrugJson, "");
+            } else {
+                wrapper.and(w -> w.isNull(InfusionRecord::getDrugJson).or().eq(InfusionRecord::getDrugJson, ""));
+            }
+        }
+        if (syncedIntake != null) {
+            wrapper.eq(InfusionRecord::getIsSyncedIntake, syncedIntake ? 1 : 0);
         }
         wrapper.orderByDesc(InfusionRecord::getStartTime);
 
@@ -276,6 +312,23 @@ public class InfusionServiceImpl implements InfusionService {
         }
         List<InfusionVO> voList = convertToVOList(Collections.singletonList(record));
         return CollUtil.isNotEmpty(voList) ? voList.get(0) : null;
+    }
+
+    @Override
+    public Map<String, Object> drugCoverage() {
+        long total = infusionRecordMapper.selectCount(new LambdaQueryWrapper<InfusionRecord>()
+                .eq(InfusionRecord::getIsDeleted, 0));
+        long withDrug = infusionRecordMapper.selectCount(new LambdaQueryWrapper<InfusionRecord>()
+                .eq(InfusionRecord::getIsDeleted, 0)
+                .isNotNull(InfusionRecord::getDrugJson)
+                .ne(InfusionRecord::getDrugJson, ""));
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("total", total);
+        result.put("withDrug", withDrug);
+        // 保留一位小数，前端直接当进度条用
+        result.put("coverage", total == 0 ? 0.0 : Math.round(withDrug * 1000.0 / total) / 10.0);
+        return result;
     }
 
     private List<InfusionVO> convertToVOList(List<InfusionRecord> records) {

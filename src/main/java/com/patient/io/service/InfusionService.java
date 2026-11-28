@@ -7,6 +7,7 @@ import com.patient.io.vo.InfusionVO;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 public interface InfusionService {
 
@@ -38,10 +39,19 @@ public interface InfusionService {
     /**
      * PC端分页查询补液记录
      */
-    Page<InfusionVO> pageInfusions(Long wardId, String bedNo, String patientName, String status, LocalDate startDate, LocalDate endDate, long current, long size);
+    Page<InfusionVO> pageInfusions(Long wardId, String bedNo, String patientName, String keyword,
+                                   String drugName, String nurseName, String status,
+                                   LocalDate startDate, LocalDate endDate,
+                                   String usageType, Boolean hasDrug, Boolean syncedIntake,
+                                   long current, long size);
 
     /**
      * 获取单条补液详情
      */
     InfusionVO getInfusionDetail(Long id);
+
+    /**
+     * 药品结构化覆盖率：total-总记录数, withDrug-有结构化用药的记录数, coverage-覆盖率百分比
+     */
+    Map<String, Object> drugCoverage();
 }
