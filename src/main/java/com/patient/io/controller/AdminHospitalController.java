@@ -24,6 +24,9 @@ public class AdminHospitalController {
     @Autowired
     private SysAdminUserMapper adminUserMapper;
 
+    @Autowired
+    private com.patient.io.service.RbacService rbacService;
+
     private void checkSuperAdmin() {
         if (!"SUPER_ADMIN".equals(UserContext.getRole())) {
             throw new BusinessException(403, "只有超级管理员有权限维护医院基础信息");
@@ -77,6 +80,8 @@ public class AdminHospitalController {
             user.setPhone(adminDTO.getPhone());
             user.setStatus(1);
             adminUserMapper.insert(user);
+            rbacService.ensurePrimaryGrant("ADMIN", user.getId(), "HOSPITAL_ADMIN",
+                    user.getHospitalId(), null, null);
         } else {
             exist.setRealName(adminDTO.getRealName());
             exist.setPhone(adminDTO.getPhone());

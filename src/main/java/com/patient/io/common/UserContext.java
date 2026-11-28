@@ -21,16 +21,37 @@ public class UserContext {
         return u != null ? u.getRole() : "PATIENT";
     }
 
+    /** ADMIN / NURSE，用于把账号映射回 sys_admin_user 或 nurse 表 */
+    public static String getUserType() {
+        CurrentUserInfo u = get();
+        if (u == null || u.getUserType() == null) {
+            return "NURSE";
+        }
+        return u.getUserType();
+    }
+
     public static void clear() {
         CURRENT_USER.remove();
     }
 
     @lombok.Data
-    @lombok.AllArgsConstructor
     @lombok.NoArgsConstructor
     public static class CurrentUserInfo {
         private Long userId;
         private String openid;
-        private String role; // NURSE, PATIENT
+        private String role; // SUPER_ADMIN / HOSPITAL_ADMIN / HEAD_NURSE / NURSE / PATIENT ...
+        private String userType; // ADMIN / NURSE
+
+        public CurrentUserInfo(Long userId, String openid, String role) {
+            this(userId, openid, role,
+                    "SUPER_ADMIN".equals(role) || "HOSPITAL_ADMIN".equals(role) ? "ADMIN" : "NURSE");
+        }
+
+        public CurrentUserInfo(Long userId, String openid, String role, String userType) {
+            this.userId = userId;
+            this.openid = openid;
+            this.role = role;
+            this.userType = userType;
+        }
     }
 }

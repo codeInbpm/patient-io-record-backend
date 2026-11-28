@@ -537,3 +537,133 @@ CREATE TABLE IF NOT EXISTS `drug_dict` (
 -- 重复执行会报 Duplicate column，已存在则忽略
 ALTER TABLE `infusion_record`
   ADD COLUMN `drug_json` text DEFAULT NULL COMMENT '结构化用药明细JSON' AFTER `remark`;
+
+-- ========================================================
+-- 通用数据字典（后台下拉选项统一来源）
+-- 2026-11-28
+-- 说明：hospital_id = 0 为平台内置通用字典，所有租户共享；
+--       医院自建字典写自己的 hospital_id，同 dict_code + item_value 时覆盖平台项。
+-- ========================================================
+
+CREATE TABLE IF NOT EXISTS `sys_dict_type` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `hospital_id` bigint NOT NULL DEFAULT '0' COMMENT '归属：0-平台通用，其他为医院ID',
+  `dict_code` varchar(64) NOT NULL COMMENT '字典编码，程序引用依据',
+  `dict_name` varchar(64) NOT NULL COMMENT '字典名称',
+  `remark` varchar(255) DEFAULT NULL COMMENT '用途说明',
+  `status` tinyint NOT NULL DEFAULT '1' COMMENT '1-启用, 0-停用',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_hosp_code` (`hospital_id`,`dict_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='数据字典类型';
+
+CREATE TABLE IF NOT EXISTS `sys_dict_item` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `hospital_id` bigint NOT NULL DEFAULT '0' COMMENT '归属：0-平台通用，其他为医院ID',
+  `dict_code` varchar(64) NOT NULL COMMENT '所属字典编码',
+  `item_value` varchar(64) NOT NULL COMMENT '存储值（写入业务表的值）',
+  `item_label` varchar(128) NOT NULL COMMENT '显示名',
+  `extra` varchar(255) DEFAULT NULL COMMENT '扩展字段（图标/单位/备注）',
+  `sort_order` int NOT NULL DEFAULT '99' COMMENT '排序',
+  `status` tinyint NOT NULL DEFAULT '1' COMMENT '1-启用, 0-停用',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_hosp_code_value` (`hospital_id`,`dict_code`,`item_value`),
+  KEY `idx_code` (`dict_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='数据字典项';
+
+-- 内置字典类型
+INSERT IGNORE INTO `sys_dict_type` (`hospital_id`, `dict_code`, `dict_name`, `remark`) VALUES
+(0, 'patient_type', '人群类别', '住院病患人群划分，影响出入量参考值'),
+(0, 'admission_type', '入院方式', '平诊/急诊，急诊患者在看板高亮'),
+(0, 'nursing_level', '护理级别', '护理分级，特级/一级计入重症护理'),
+(0, 'drainage_tube', '留置管路', '病患留置管路类型，可多选'),
+(0, 'nurse_role', '医护岗位角色', '护士档案岗位'),
+(0, 'infusion_usage', '补液给药用法', '补液登记的给药途径，可自定义扩展'),
+(0, 'blood_sugar_type', '血糖测量时点', '交接班血糖记录时点'),
+(0, 'laxative_drug', '常用泻药', '交接班泻药记录的常用药名'),
+(0, 'drug_dosage_form', '药品剂型', '补液药品字典的剂型'),
+(0, 'drug_unit', '药品单位', '补液药品字典的计量单位'),
+(0, 'drug_route', '给药途径', '补液药品字典默认给药途径'),
+(0, 'diagnosis', '常用临床诊断', '病患建档时的诊断联想词，可直接输入其它诊断');
+
+-- 内置字典项
+INSERT IGNORE INTO `sys_dict_item` (`hospital_id`, `dict_code`, `item_value`, `item_label`, `sort_order`) VALUES
+(0,'patient_type','ADULT','成人',1),
+(0,'patient_type','INFANT','婴儿',2),
+(0,'admission_type','ROUTINE','平诊',1),
+(0,'admission_type','EMERGENCY','急诊',2),
+(0,'nursing_level','SPECIAL','特级护理',1),
+(0,'nursing_level','LEVEL_1','一级护理',2),
+(0,'nursing_level','LEVEL_2','二级护理',3),
+(0,'nursing_level','LEVEL_3','三级护理',4),
+(0,'drainage_tube','CATHER','留置导尿管',1),
+(0,'drainage_tube','GASTRIC','胃肠减压管',2),
+(0,'drainage_tube','DRAINAGE','引流管(胸/腹腔)',3),
+(0,'drainage_tube','PICC','PICC置管',4),
+(0,'drainage_tube','CVC','中心静脉导管',5),
+(0,'drainage_tube','PORT','输液港',6),
+(0,'drainage_tube','NASOBILIARY','鼻胆管',7),
+(0,'drainage_tube','ABDOM_DRAIN','腹腔引流管',8),
+(0,'drainage_tube','OTHER','其他管道',9),
+(0,'nurse_role','HEAD_NURSE','护士长',1),
+(0,'nurse_role','NURSE','责任护士',2),
+(0,'infusion_usage','ivg','静滴',1),
+(0,'infusion_usage','ibn','静推',2),
+(0,'infusion_usage','ivdrip','静脉滴注',3),
+(0,'infusion_usage','iv','静脉注射',4),
+(0,'infusion_usage','im','肌注',5),
+(0,'infusion_usage','sc','皮下注射',6),
+(0,'infusion_usage','po','口服',7),
+(0,'blood_sugar_type','空腹','空腹',1),
+(0,'blood_sugar_type','餐后2h','餐后2h',2),
+(0,'blood_sugar_type','随机','随机',3),
+(0,'blood_sugar_type','睡前','睡前',4),
+(0,'blood_sugar_type','凌晨','凌晨3点',5),
+(0,'laxative_drug','复方聚乙二醇电解质散','复方聚乙二醇电解质散',1),
+(0,'laxative_drug','聚乙二醇4000散','聚乙二醇4000散',2),
+(0,'laxative_drug','乳果糖口服溶液','乳果糖口服溶液',3),
+(0,'laxative_drug','硫酸镁','硫酸镁',4),
+(0,'laxative_drug','番泻叶','番泻叶',5),
+(0,'laxative_drug','开塞露','开塞露',6),
+(0,'laxative_drug','甘油灌肠剂','甘油灌肠剂',7),
+(0,'drug_dosage_form','注射剂','注射剂',1),
+(0,'drug_dosage_form','粉针剂','粉针剂',2),
+(0,'drug_dosage_form','片剂','片剂',3),
+(0,'drug_dosage_form','胶囊剂','胶囊剂',4),
+(0,'drug_dosage_form','颗粒剂','颗粒剂',5),
+(0,'drug_dosage_form','口服溶液','口服溶液',6),
+(0,'drug_dosage_form','乳膏剂','乳膏剂',7),
+(0,'drug_dosage_form','滴眼液','滴眼液',8),
+(0,'drug_dosage_form','栓剂','栓剂',9),
+(0,'drug_unit','ml','ml',1),
+(0,'drug_unit','g','g',2),
+(0,'drug_unit','mg','mg',3),
+(0,'drug_unit','支','支',4),
+(0,'drug_unit','瓶','瓶',5),
+(0,'drug_unit','袋','袋',6),
+(0,'drug_unit','片','片',7),
+(0,'drug_unit','粒','粒',8),
+(0,'drug_unit','IU','IU',9),
+(0,'drug_route','ivg','静滴',1),
+(0,'drug_route','ibn','静推',2),
+(0,'drug_route','ivdrip','静脉滴注',3),
+(0,'drug_route','iv','静脉注射',4),
+(0,'drug_route','im','肌注',5),
+(0,'drug_route','sc','皮下注射',6),
+(0,'drug_route','po','口服',7),
+(0,'drug_route','外用','外用',8),
+(0,'diagnosis','胃癌术后','胃癌术后',1),
+(0,'diagnosis','胆囊结石伴急性胆囊炎','胆囊结石伴急性胆囊炎',2),
+(0,'diagnosis','急性心肌梗死合并心力衰竭','急性心肌梗死合并心力衰竭',3),
+(0,'diagnosis','高血压脑出血恢复期','高血压脑出血恢复期',4),
+(0,'diagnosis','2型糖尿病','2型糖尿病',5),
+(0,'diagnosis','慢性阻塞性肺疾病急性加重','慢性阻塞性肺疾病急性加重',6),
+(0,'diagnosis','急性胰腺炎','急性胰腺炎',7),
+(0,'diagnosis','肠梗阻','肠梗阻',8),
+(0,'diagnosis','肝硬化失代偿期','肝硬化失代偿期',9),
+(0,'diagnosis','泌尿系结石','泌尿系结石',10),
+(0,'diagnosis','肺部感染','肺部感染',11),
+(0,'diagnosis','脑梗死','脑梗死',12);

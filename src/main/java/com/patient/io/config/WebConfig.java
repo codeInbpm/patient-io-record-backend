@@ -12,6 +12,9 @@ public class WebConfig implements WebMvcConfigurer {
     @Autowired
     private AuthInterceptor authInterceptor;
 
+    @Autowired
+    private AdminPermissionInterceptor adminPermissionInterceptor;
+
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(authInterceptor)
@@ -27,6 +30,18 @@ public class WebConfig implements WebMvcConfigurer {
                         "/swagger-resources/**",
                         "/webjars/**"
                 );
+
+        // 权限闸门必须排在 AuthInterceptor 之后（登录上下文已写入 ThreadLocal）。
+        // 管辖范围从 /v1/admin/** 扩到 /v1/**：业务接口（患者、补液、交班）同样需要操作级鉴权；
+        // 小程序端账号（无后台授权）由 PermissionRules 判定为 backendUser=false 时放行。
+        registry.addInterceptor(adminPermissionInterceptor)
+                .addPathPatterns("/v1/**")
+                .excludePathPatterns(
+                        "/v1/auth/**",
+                        "/v1/admin/auth/**",
+                        "/v1/file/**"
+                )
+                .order(1);
     }
 
     @Override

@@ -47,6 +47,9 @@ public class NurseServiceImpl implements NurseService {
     @Autowired
     private DepartmentMapper departmentMapper;
 
+    @Autowired
+    private com.patient.io.service.RbacService rbacService;
+
     @Override
     public List<NurseManageVO> listNurseOptions(Long wardId) {
         LambdaQueryWrapper<Nurse> queryWrapper = new LambdaQueryWrapper<>();
@@ -241,10 +244,16 @@ public class NurseServiceImpl implements NurseService {
             nurse.setWardName(dto.getWardName().trim());
         }
 
-        if (nurse.getId() != null) {
-            nurseMapper.updateById(nurse);
-        } else {
+        boolean isNew = nurse.getId() == null;
+        if (isNew) {
             nurseMapper.insert(nurse);
+        } else {
+            nurseMapper.updateById(nurse);
+        }
+        if (isNew) {
+            // 新护士默认拿到主角色授权，避免「已迁移」状态下新账号无任何权限
+            rbacService.ensurePrimaryGrant("NURSE", nurse.getId(), nurse.getRole(),
+                    nurse.getHospitalId(), nurse.getDeptId(), nurse.getWardId());
         }
 
         return NurseManageVO.builder()

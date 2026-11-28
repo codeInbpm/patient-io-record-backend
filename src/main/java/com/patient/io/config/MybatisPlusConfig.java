@@ -19,11 +19,22 @@ import java.util.List;
 public class MybatisPlusConfig {
 
     // 平台级白名单表，不追加 hospital_id 过滤
+    // sys_dict_* 需要同时读到平台通用(hospital_id=0)与本院数据，过滤条件在 Service 内显式拼装
     private static final List<String> IGNORE_TABLES = Arrays.asList(
             "hospital",
             "sys_admin_user",
             "sys_user",
-            "infusion_image"
+            "infusion_image",
+            "sys_dict_type",
+            "sys_dict_item",
+            // RBAC 表由 RbacService 显式控制 hospital_id 条件：
+            // sys_role 需同时读平台内置(hospital_id=0)与本院自建；
+            // 关联表与审计表没有 hospital_id 列，绝不能被租户插件拼条件。
+            "sys_role",
+            "sys_permission",
+            "sys_role_permission",
+            "sys_user_role",
+            "sys_audit_log"
     );
 
     @Bean

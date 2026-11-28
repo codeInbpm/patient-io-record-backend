@@ -225,11 +225,21 @@ public class PatientServiceImpl extends ServiceImpl<PatientMapper, Patient> impl
 
         List<Patient> patients = new ArrayList<>();
 
-        if ("HEAD_NURSE".equals(role) || "SUPER_ADMIN".equals(role) || "HOSPITAL_ADMIN".equals(role)) {
-            // 护士长与系统管理员：查看该病房下的所有在院病人
+        // 数据范围：非 SELF 的账号按范围取数；WARD 范围未指定病区时自动收窄到授权病区，
+        // 避免护士长不选病区就拿到全院患者（旧实现正是这个口子）。
+        java.util.List<Long> scopeWards = com.patient.io.common.ScopeContext.getWardIds();
+        boolean wardScoped = com.patient.io.common.ScopeContext.WARD
+                .equals(com.patient.io.common.ScopeContext.getScope())
+                && scopeWards != null && !scopeWards.isEmpty();
+
+        if (!com.patient.io.common.ScopeContext.SELF.equals(com.patient.io.common.ScopeContext.getScope())
+                || "HEAD_NURSE".equals(role) || "SUPER_ADMIN".equals(role) || "HOSPITAL_ADMIN".equals(role)) {
+            // 护士长与管理员：按病区查看在院病人
             LambdaQueryWrapper<Patient> wrapper = new LambdaQueryWrapper<>();
             if (wardId != null) {
                 wrapper.eq(Patient::getWardId, wardId);
+            } else if (wardScoped) {
+                wrapper.in(Patient::getWardId, scopeWards);
             }
             wrapper.eq(Patient::getStatus, 1)
                    .orderByAsc(Patient::getBedNo);

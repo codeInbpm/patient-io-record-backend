@@ -12,6 +12,7 @@ import com.patient.io.entity.SysAdminUser;
 import com.patient.io.mapper.HospitalMapper;
 import com.patient.io.mapper.NurseMapper;
 import com.patient.io.mapper.SysAdminUserMapper;
+import com.patient.io.service.RbacService;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -34,6 +35,9 @@ public class AdminAuthController {
 
     @Autowired
     private JwtUtils jwtUtils;
+
+    @Autowired
+    private RbacService rbacService;
 
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@RequestBody LoginRequest req) {
@@ -60,15 +64,18 @@ public class AdminAuthController {
             claims.put("role", user.getRole());
             claims.put("username", user.getUsername());
             claims.put("hospitalId", user.getHospitalId());
+            claims.put("utype", "ADMIN");
 
             String token = jwtUtils.generateToken(claims);
 
             Map<String, Object> resp = new HashMap<>();
             resp.put("token", token);
+            resp.put("userId", user.getId());
             resp.put("role", user.getRole());
             resp.put("username", user.getUsername());
             resp.put("realName", user.getRealName());
             resp.put("hospitalId", user.getHospitalId());
+            attachRbac(resp, "ADMIN", user.getId());
 
             if (user.getHospitalId() != null) {
                 Hospital h = hospitalMapper.selectById(user.getHospitalId());
@@ -107,11 +114,13 @@ public class AdminAuthController {
             claims.put("username", nurse.getJobNumber());
             claims.put("hospitalId", nurse.getHospitalId());
             claims.put("wardId", nurse.getWardId());
+            claims.put("utype", "NURSE");
 
             String token = jwtUtils.generateToken(claims);
 
             Map<String, Object> resp = new HashMap<>();
             resp.put("token", token);
+            resp.put("userId", nurse.getId());
             resp.put("role", nurse.getRole());
             resp.put("username", nurse.getJobNumber());
             resp.put("realName", nurse.getRealName());
@@ -122,11 +131,43 @@ public class AdminAuthController {
             resp.put("building", nurse.getBuilding() != null ? nurse.getBuilding() : nurse.getDepartment());
             resp.put("wardId", nurse.getWardId());
             resp.put("wardName", nurse.getWardName());
+            attachRbac(resp, "NURSE", nurse.getId());
 
             return Result.success(resp);
         }
 
         throw new BusinessException("账号或密码错误");
+    }
+
+    /**
+     * 当前登录人的权限快照。前端路由守卫、菜单渲染、按钮显隐都以这里为准。
+     */
+    @GetMapping("/me")
+    public Result<Map<String, Object>> me() {
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            throw new BusinessException(401, "未登录或登录已失效");
+        }
+        return Result.success(rbacService.me(UserContext.getUserType(), userId));
+    }
+
+    /**
+     * 登录响应带上权限快照，避免前端登录后立刻再发一次 /me 请求。
+     * RBAC 表尚未建立时静默降级：前端会回落到角色映射。
+     */
+    private void attachRbac(Map<String, Object> resp, String userType, Long userId) {
+        try {
+            Map<String, Object> me = rbacService.me(userType, userId);
+            resp.put("permissions", me.get("permissions"));
+            resp.put("roleCodes", me.get("roleCodes"));
+            resp.put("dataScope", me.get("dataScope"));
+            resp.put("wardIds", me.get("wardIds"));
+            resp.put("userType", userType);
+        } catch (Exception e) {
+            resp.put("permissions", java.util.Collections.emptyList());
+            resp.put("roleCodes", java.util.Collections.emptyList());
+            resp.put("userType", userType);
+        }
     }
 
     /**
@@ -141,8 +182,8 @@ public class AdminAuthController {
             throw new BusinessException("未登录或登录已失效");
         }
 
-        if (!"SUPER_ADMIN".equals(role) && !"HOSPITAL_ADMIN".equals(role)) {
-            throw new BusinessException("当前账号角色不支持在此修改密码");
+        if (!"ADMIN".equals(UserContext.getUserType())) {
+            throw new BusinessException("护士账号请在小程序端或联系管理员重置密码");
         }
 
         if (req.getOldPassword() == null || req.getOldPassword().trim().isEmpty()) {
